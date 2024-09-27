@@ -55,6 +55,7 @@ pub struct Config {
     upstream: String,
     index: String,
     extern_url: String,
+    bind: String,
     port: u16,
     refresh_interval: Duration,
     threads: u32,
@@ -111,6 +112,14 @@ impl Config {
                     .required(false)
                     .takes_value(true)
                     .help("Upstream Crate source (Default: https://static.crates.io/crates/)"),
+            )
+            .arg(
+                Arg::with_name("bind")
+                    .long("bind")
+                    .short("b")
+                    .required(false)
+                    .takes_value(true)
+                    .help("Address to bind to (Default: localhost)"),
             )
             .arg(
                 Arg::with_name("port")
@@ -172,6 +181,10 @@ impl Config {
         crate_path.push_str("/crates");
         let mut git_index: String = index_path.clone();
         git_index.push_str("/index");
+        let bind: String = matches
+            .value_of("bind")
+            .unwrap_or("localhost")
+            .into();
         let port = u16::from_str(matches.value_of("port")
                     .unwrap_or("8080"))
                 .unwrap_or(8080);
@@ -202,10 +215,14 @@ impl Config {
                 .value_of("git")
                 .unwrap_or("https://github.com/rust-lang/crates.io-index.git")
                 .into(),
+            bind: matches
+                .value_of("bind")
+                .unwrap_or("localhost")
+                .into(),
             port: u16::from_str(matches.value_of("port").unwrap_or("8080")).unwrap_or(8080),
             extern_url: matches.value_of("extern-url")
                 .map(Into::into)
-                .unwrap_or(format!("http://localhost:{}", port)),
+                .unwrap_or(format!("http://{}:{}", bind, port)),
             refresh_interval: refresh_interval,
             threads: u32::from_str(matches.value_of("threads").unwrap_or("16")).unwrap_or(16),
             log_level: log_level,
@@ -257,7 +274,7 @@ impl AfterMiddleware for CorsMiddleware {
 
 fn server(config: &Config, stats: SyncSender<CargoRequest>) {
     // web server to handle DL requests
-    let host = format!(":::{}", config.port);
+    let host = format!("{}:{}", config.bind, config.port);
     let router = router!(
         stats_json: get "/stats.json" => {
                 move |_request: &mut Request|
